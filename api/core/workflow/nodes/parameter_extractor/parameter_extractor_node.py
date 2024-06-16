@@ -1,3 +1,4 @@
+import re
 import json
 import uuid
 from typing import Optional, cast
@@ -499,37 +500,61 @@ class ParameterExtractorNode(LLMNode):
         """
         Extract complete json response.
         """
+
         def extract_json(text):
             """
             From a given JSON started from '{' or '[' extract the complete JSON object.
             """
             stack = []
             for i, c in enumerate(text):
-                if c == '{' or c == '[':
+                if c == '{' or c == '[' or c == '(':
+
                     stack.append(c)
-                elif c == '}' or c == ']':
+                elif c == '}' or c == ']' or c == ')':
                     # check if stack is empty
                     if not stack:
                         return text[:i]
                     # check if the last element in stack is matching
-                    if (c == '}' and stack[-1] == '{') or (c == ']' and stack[-1] == '['):
+                    if (c == '}' and stack[-1] == '{') or (c == ']' and stack[-1] == '[') or (
+                            c == ')' and stack[-1] == '('):
+
                         stack.pop()
+
                         if not stack:
-                            return text[:i+1]
+                            return text[:i + 1]
                     else:
+
                         return text[:i]
             return None
-        
+
         # extract json from the text
+
         for idx in range(len(result)):
-            if result[idx] == '{' or result[idx] == '[':
+            if result[idx] == '{' or result[idx] == '[' or result[idx] == '(':
+
                 json_str = extract_json(result[idx:])
+
                 if json_str:
                     try:
-                        return json.loads(json_str)
+
+                        if result[idx] == '(':
+                            if json_str.startswith('(') and json_str.endswith(')'):
+                                input_str = json_str[1:-1]
+
+                                # Replace single quotes with double quotes
+                                input_str = input_str.replace("'", '"')
+
+                                # Replace `=` with `:` to form valid JSON key-value pairs
+                                input_str = re.sub(r'(\w+)=', r'"\1":', input_str)
+
+                                # Add curly braces to form a valid JSON object
+                                json_str = '{' + input_str + '}'
+                                return json.loads(json_str)
+
+                        else:
+                            return json.loads(json_str)
                     except Exception:
                         pass
-
     def _extract_json_from_tool_call(self, tool_call: AssistantPromptMessage.ToolCall) -> Optional[dict]:
         """
         Extract json from tool call.
